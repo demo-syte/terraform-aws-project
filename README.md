@@ -18,8 +18,9 @@ vprofile-Project
   Maintain state of infra
   Version control
   repeatable, reusable code
+  
 
- ** Tools** : Teraaform Configuration mgmt of cloud 
+ **** Tools** **: Teraaform Configuration mgmt of cloud 
 **
   Setup:**
         setup Teraaform with backend
