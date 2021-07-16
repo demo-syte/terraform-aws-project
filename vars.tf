@@ -80,30 +80,30 @@ variable "vpc-cidr" {
 
 variable "publicsubnet1" {
 
-  default = "172.21.1.0/24"
+  default = "172.0.1.0/24"
 }
 
 variable "publicsubnet2" {
 
-  default = "172.21.2.0/24"
+  default = "172.0.2.0/24"
 }
 
 variable "publicsubnet3" {
 
-  default = "172.21.3.0/24"
+  default = "172.0.3.0/24"
 }
 
 variable "privatesubnet1" {
 
-  default = "172.16.1.0/24"
+  default = "172.0.11.0/24"
 }
 
 variable "privatesubnet2" {
 
-  default = "172.16.2.0/24"
+  default = "172.0.12.0/24"
 }
 
 variable "privatesubnet3" {
 
-  default = "172.16.3.0/24"
+  default = "172.0.13.0/24"
 }
