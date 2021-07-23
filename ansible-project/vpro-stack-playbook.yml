@@ -1,0 +1,147 @@
+---
+ - name: setting up instances via Ansible Server on Aws
+   hosts: localhost
+   connection: local
+   gather_facts: false
+   vars_files:
+           - vars_file.yml
+           - dict_vars  
+   tasks:
+     - name: EC2_key Creation
+       ec2_key:
+         name: vpro-key
+         region: us-east-2
+       register: ec2_info_key
+
+       #     - debug:
+       # msg: "{{ ec2_info_key }}"
+
+
+     - name: save private Key into file ec2_info_key.pem
+       copy:
+         content: "{{ ec2_info_key.key.private_key }}"
+         dest: "./login_key_vprofile.pem"
+         mode: 0400
+       when: ec2_info_key.changed  
+
+
+     - name: ec2-vpc security Group creation
+       ec2_group:
+           name: vpro_stack_sg
+           description: vpc_security_group
+           region: "{{ region }}"
+           rules:
+              - proto: tcp
+                from_port: 22
+                to_port: 22
+                cidr_ip: "{{ myip }}"
+
+              - proto: tcp
+                from_port: 80
+                to_port: 80
+                cide_ip: 0.0.0.0/0
+
+              - proto: tcp
+                from_port: 3306
+                to_port: 3306
+                cidr_ip: "{{ myip }}"
+
+              - proto: tcp
+                from_port: 8080
+                to_port: 8080
+                cidr_ip: "{{ myip }}"
+       register: vproStacksSG    
+
+     - debug:
+          msg: "{{ vproStacksSG }}"    
+             
+     - name: Secuity Group rule amendmend for internal traffic
+       ec2_group:
+          name: vpro_stack_sg
+          description: vpc_security_group
+          region: "{{ region }}"    
+          rules:
+           - proto: tcp
+             from_port: 22
+             to_port: 22
+             cidr_ip: "{{ myip }}"
+
+           - proto: tcp
+             from_port: 80
+             to_port: 80
+             cide_ip: 0.0.0.0/0
+
+           - proto: tcp
+             from_port: 3306
+             to_port: 3306
+             cidr_ip: "{{ myip }}"
+
+           - proto: tcp
+             from_port: 8080
+             to_port: 8080
+             cidr_ip: "{{ myip }}"
+
+             # Below Group will allow the connections within a group on any port.
+
+           - proto: all
+             group_id: "{{ vproStacksSG.group_id }}"
+
+             # Ansible Group which allow connections from Controller to all instances.
+           - proto: tcp
+             from_port: 22
+             to_port: 22
+             group_id: sg-02353b5402a5b13ad
+       register: vproStacksSG
+       when: vproStacksSG.changed   
+
+
+     - name: setting up instances via Ansible Server on Aws
+       ec2:
+           key_name: vpro-key
+           region: "{{ region }}"
+           instance_type: t2.micro
+           image: ami-01e7ca2ef94a0ae86
+           wait: true
+           exact_count: 1
+           count_tag: 
+              name: "{{item.value.name}}"
+              project: vprofile
+              owner: devops team
+           group_id: "{{ vproStacksSG.group_id }}"
+           vpc_subnet_id: "{{ item.value.subnet }}"   
+           instance_tags:
+                  name: "{{item.value.name}}"
+                  project: vprofile
+                  owner: devops team
+       loop: "{{lookup('dict', inst_details)}}"
+       register: ec2_info_instances
+      
+     - debug: 
+         msg: "{{item.key}}"   
+       loop: "{{lookup('dict', inst_details)}}"
+
+     - debug: 
+         msg: "{{item.value}}"   
+       loop: "{{lookup('dict', inst_details)}}"
+
+           
+       # - debug:
+       #  msg:  "{{ec2_info_instances}}"  
+
+     - debug:
+         msg: "Public Ip for Instannce {{item.name}} is: {{item.ip}}" 
+       loop:
+        - name: Nginx01
+          ip: "{{ec2_info_instances.results[0].tagged_instances[0].private_ip}}"
+        - name: Nginx02
+          ip: "{{ec2_info_instances.results[1].tagged_instances[0].private_ip}}"
+        - name: tomcat01
+          ip: "{{ec2_info_instances.results[2].tagged_instances[0].private_ip}}"
+        - name: tomcat02
+          ip: "{{ec2_info_instances.results[3].tagged_instances[0].private_ip}}"
+        - name: rmq01
+          ip: "{{ec2_info_instances.results[4].tagged_instances[0].private_ip}}"
+        - name: Memcache01
+          ip: "{{ec2_info_instances.results[5].tagged_instances[0].private_ip}}"
+        - name: db01
+          ip: "{{ec2_info_instances.results[6].tagged_instances[0].private_ip}}"

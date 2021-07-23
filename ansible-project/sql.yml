@@ -1,0 +1,54 @@
+
+hosts: test
+
+    var_files:
+    - global_vars/config.yml
+   
+    - name: Install mySQL Server
+      apt: name=mysql-server state=present
+    - name: Install Additional Dependencies
+      apt:
+        pkg:
+          - postfix-mysql
+          - dovecot-imapd
+          - dovecot-lmtpd
+          - dovecot-mysql
+          - python-pymysql
+          - mysql-client
+          - mysql-common
+        state: present
+# MySQL 
+    - name: Ensure mySQL is running and starts on boot
+      service: name=mysql state=started enabled=true
+
+    - name: Stop MySQL
+      service: name=mysql state=stopped
+    - name: set environment variables
+      shell: systemctl set-environment MYSQLD_OPTS="--skip-grant-tables"
+    - name: Start MySQL
+      service: name=mysql state=started
+    - name: sql query
+      command:  mysql -u root --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '"{{ mysql_root_password }}"';"
+    - name: Create ~/.my.cnf
+      file:
+        path: ~/.my.cnf
+        state: touch
+    - name: Insert into ~/.my.cnf
+      blockinfile:
+        path: ~/.my.cnf
+        block: |
+          [client]
+          user={{ mysql_user }}
+          password={{ mysql_root_password }}
+    - name: sql query flush
+      command:  mysql -u root --execute="FLUSH PRIVILEGES"
+    - name: Stop MySQL
+      service: name=mysql state=stopped
+    - name: unset environment variables
+      shell: systemctl unset-environment MYSQLD_OPTS
+    - name: Start MySQL
+
+A
+A
+A
+      service: name=mysql state=started

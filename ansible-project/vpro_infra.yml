@@ -1,0 +1,27 @@
+---
+ - name: setting up instances via Ansible Server on Aws
+   hosts: localhost
+   connection: local
+   gather_facts: false
+   tasks:
+     - name: provision of instances
+       ec2:
+         key_name: my_key
+         group: ansible-SG
+         instance_type: t2.micro
+         image: "{{ami-01aab85a5e4a5a0fe}}"
+         wait: true
+         region: us-east-2
+         exact_count: 1
+         count_tag: 
+            name: Demo
+         instance_tags:
+           name: Demo
+       register: ec2-info
+
+     - debug:
+         msg: "{{ ec2-info }}"  
+
+
+
+

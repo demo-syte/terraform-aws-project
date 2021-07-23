@@ -1,0 +1,29 @@
+---
+ - region: us-east-2
+ - myip: 202.186.71.127/32
+ - image: ami-01aab85a5e4a5a0fe  
+ - sub1: subnet-2f511863
+ - sub2: subnet-2451f94f
+ - sub3: subnet-7251b70f
+ - web01:
+      name: Nginx01
+      subnet: subnet-2f511863
+ - web02:
+      name: Naginx02
+      subnet: subnet-2f511863
+ - app01:
+      name: Tomcat01
+      subnet: subnet-2451f94f
+      
+ - app01:
+      name: Tomcat01
+      subnet: subnet-2451f94f
+ - rmq01:
+      name: RMQ01
+      subnet: subnet-2451f94f
+ - mc01:
+     name: Memcache01
+     subnet: subnet-2451f94f
+ - db01:
+     name: db01
+     subnet: subnet-7251b70f
