@@ -1,0 +1,725 @@
+####################################
+providers Details
+####################################
+provider "aws" {
+  region = var.REGION
+}
+####################################
+Building keypairs 
+####################################
+
+resource "aws_key_pair" "vprofilekey" {
+
+  key_name   = "vprofilekey"
+  public_key = file(var.Public_key_path)
+
+}
+####################################
+Building Security Groups for Stack
+####################################
+
+resource "aws_security_group" "vprofile-bean-elb-sg" {
+
+  vpc_id      = module.vpc.vpc_id
+  name        = "vprofile-bean-elb-sg"
+  description = "Security group for bean-elb"
+
+
+  ingress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 80
+    protocol    = "tcp"
+    to_port     = 80
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+
+
+}
+
+resource "aws_security_group" "vprofile-bastion-sg" {
+
+  name        = "bastion-sg"
+  description = "Security Group for bastion host ec2 instances"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    cidr_blocks = [var.myip]
+    from_port   = 22
+    protocol    = "tcp"
+    to_port     = 22
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+
+}
+
+resource "aws_security_group" "vprofile-prod-sg" {
+
+  name        = "vprofile-prod-sg"
+  description = "Security group for beanstalk instances"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 22
+    protocol        = "tcp"
+    to_port         = 22
+    
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+}
+resource "aws_security_group" "vprofile-backend-sg" {
+
+  name        = "vprofile-backend-sg"
+  description = "Security group for RDS,active MQ,elastic cache"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    security_groups = [aws_security_group.vprofile-prod-sg.id]
+    from_port       = 0
+    protocol        = "-1"
+    to_port         = 0 
+  }
+
+   ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 3306
+    protocol        = "tcp"
+    to_port         = 3306
+  }
+
+   ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 22
+    protocol        = "tcp"
+    to_port         = 22
+  }
+  
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+}
+
+resource "aws_security_group_rule" "sec-allow_itself" {
+
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.vprofile-backend-sg.id
+  source_security_group_id = aws_security_group.vprofile-backend-sg.id
+}
+resource "aws_db_subnet_group" "rds-db" {
+
+  subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
+  name       = "main"
+
+  tags = {
+    Name = "Subnet group for RDS"
+  }
+
+}
+
+resource "aws_elasticache_subnet_group" "vprofile-ecache-subgroup" {
+
+  name       = "vprofile-ecache-subgrp"
+  subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
+
+  tags = {
+    "Name" = "Subnet Group of ecache"
+  }
+}
+
+resource "aws_db_instance" "vprofile-rds" {
+
+  allocated_storage      = 20
+  engine                 = "mysql"
+  engine_version         = "5.7"
+  instance_class         = "db.t2.micro"
+  name                   = var.dbname
+  username               = var.dbuser
+  password               = var.dbpass
+  parameter_group_name   = "default.mysql5.7"
+  publicly_accessible    = "false"
+  multi_az               = "false"
+  skip_final_snapshot    = "true"
+  db_subnet_group_name   = aws_db_subnet_group.rds-db.name
+  vpc_security_group_ids = [aws_security_group.vprofile-backend-sg.id]
+
+}
+
+resource "aws_elasticache_cluster" "vprofile-cache" {
+  cluster_id         = "vprofile-cache"
+  engine             = "memcached"
+  node_type          = "cache.t2.micro"
+  num_cache_nodes    = 1
+  port               = 11211
+  subnet_group_name  = aws_elasticache_subnet_group.vprofile-ecache-subgroup.name
+  security_group_ids = [aws_security_group.vprofile-backend-sg.id]
+}
+
+resource "aws_mq_broker" "vprofile-rmq" {
+  broker_name = "vprofile-rmq"
+
+  engine_type        = "ActiveMQ"
+  engine_version     = "5.15.0"
+  host_instance_type = "mq.t2.micro"
+  security_groups    = [aws_security_group.vprofile-backend-sg.id]
+  subnet_ids         = [module.vpc.private_subnets[0]]
+
+  user {
+    username = var.rmquser
+    password = var.rmqpass
+  }
+}resource "aws_security_group" "vprofile-bean-elb-sg" {
+
+  vpc_id      = module.vpc.vpc_id
+  name        = "vprofile-bean-elb-sg"
+  description = "Security group for bean-elb"
+
+
+  ingress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 80
+    protocol    = "tcp"
+    to_port     = 80
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+
+
+}
+
+resource "aws_security_group" "vprofile-bastion-sg" {
+
+  name        = "bastion-sg"
+  description = "Security Group for bastion host ec2 instances"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    cidr_blocks = [var.myip]
+    from_port   = 22
+    protocol    = "tcp"
+    to_port     = 22
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+
+}
+
+resource "aws_security_group" "vprofile-prod-sg" {
+
+  name        = "vprofile-prod-sg"
+  description = "Security group for beanstalk instances"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 22
+    protocol        = "tcp"
+    to_port         = 22
+    
+  }
+
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+}
+resource "aws_security_group" "vprofile-backend-sg" {
+
+  name        = "vprofile-backend-sg"
+  description = "Security group for RDS,active MQ,elastic cache"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    security_groups = [aws_security_group.vprofile-prod-sg.id]
+    from_port       = 0
+    protocol        = "-1"
+    to_port         = 0 
+  }
+
+   ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 3306
+    protocol        = "tcp"
+    to_port         = 3306
+  }
+
+   ingress {
+    security_groups = [aws_security_group.vprofile-bastion-sg.id]
+    from_port       = 22
+    protocol        = "tcp"
+    to_port         = 22
+  }
+  
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 0
+    protocol    = "-1"
+    to_port     = 0
+  }
+}
+
+resource "aws_security_group_rule" "sec-allow_itself" {
+
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.vprofile-backend-sg.id
+  source_security_group_id = aws_security_group.vprofile-backend-sg.id
+}
+
+####################################
+Building Subnet Groups to use in Stack
+####################################
+
+resource "aws_db_subnet_group" "rds-db" {
+
+  subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
+  name       = "main"
+
+  tags = {
+    Name = "Subnet group for RDS"
+  }
+
+}
+
+resource "aws_elasticache_subnet_group" "vprofile-ecache-subgroup" {
+
+  name       = "vprofile-ecache-subgrp"
+  subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
+
+  tags = {
+    "Name" = "Subnet Group of ecache"
+  }
+}
+
+resource "aws_db_instance" "vprofile-rds" {
+
+  allocated_storage      = 20
+  engine                 = "mysql"
+  engine_version         = "5.7"
+  instance_class         = "db.t2.micro"
+  name                   = var.dbname
+  username               = var.dbuser
+  password               = var.dbpass
+  parameter_group_name   = "default.mysql5.7"
+  publicly_accessible    = "false"
+  multi_az               = "false"
+  skip_final_snapshot    = "true"
+  db_subnet_group_name   = aws_db_subnet_group.rds-db.name
+  vpc_security_group_ids = [aws_security_group.vprofile-backend-sg.id]
+
+}
+
+resource "aws_elasticache_cluster" "vprofile-cache" {
+  cluster_id         = "vprofile-cache"
+  engine             = "memcached"
+  node_type          = "cache.t2.micro"
+  num_cache_nodes    = 1
+  port               = 11211
+  subnet_group_name  = aws_elasticache_subnet_group.vprofile-ecache-subgroup.name
+  security_group_ids = [aws_security_group.vprofile-backend-sg.id]
+}
+
+resource "aws_mq_broker" "vprofile-rmq" {
+  broker_name = "vprofile-rmq"
+
+  engine_type        = "ActiveMQ"
+  engine_version     = "5.15.0"
+  host_instance_type = "mq.t2.micro"
+  security_groups    = [aws_security_group.vprofile-backend-sg.id]
+  subnet_ids         = [module.vpc.private_subnets[0]]
+
+  user {
+    username = var.rmquser
+    password = var.rmqpass
+  }
+}
+
+####################################
+Using VPC Module for Building AWS VPC
+####################################
+
+
+module "vpc" {
+
+  source          = "terraform-aws-modules/vpc/aws"
+  name            = var.vpc_name
+  cidr            = var.vpc-cidr
+  azs             = [var.zone1, var.zone2, var.zone3]
+  private_subnets = [var.privatesubnet1, var.privatesubnet2, var.privatesubnet3]
+  public_subnets  = [var.publicsubnet1, var.publicsubnet2, var.publicsubnet3]
+
+  enable_nat_gateway   = true
+  single_nat_gateway   = true
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+
+  tags = {
+    Terraform  = "true"
+    Enviroment = "Dev"
+  }
+
+
+  vpc_tags = {
+    Name = var.vpc_name
+  }
+}
+
+####################################
+Building Bastion Host for SSH into
+####################################
+
+resource "aws_instance" "vprofile-Bastion" {
+   ami = lookup(var.AMIS , var.REGION)
+   instance_type = "t2.micro"
+   key_name = aws_key_pair.vprofilekey.key_name
+   subnet_id = module.vpc.public_subnets[0]
+   count = var.instance_count
+   vpc_security_group_ids = [aws_security_group.vprofile-bastion-sg.id]
+
+   tags = {
+       Name = "vprofile-bastion"
+       Project = "vprofile"
+   }
+
+   provisioner "file" {
+       
+       content = templatefile("db-deploy.tmpl" , { rds-endpoint = aws_db_instance.vprofile-rds.address, dbuser = var.dbuser, dbpass = var.dbpass })
+       destination = "/tmp/vprofile-dbdeploy.sh"
+       
+   }
+
+   provisioner "remote-exec" {
+       
+       inline = [
+         "sudo chmod +x /tmp/vprofile-dbdepoloy.sh",
+         "bash /tmp/vprofile-dbdeploy.sh"
+       ]
+     
+   }
+      
+   
+
+   connection {
+
+        user = var.user
+        private_key = file(var.Pri-key)
+        host = self.public_ip
+    }      
+   
+
+   depends_on = [aws_db_subnet_group.rds-db]
+}
+
+###############################################
+Building beanstalk application & its Enviroment
+###############################################
+
+resource "aws_elastic_beanstalk_application" "vprofile-prod" {
+  name = "vprofile-prod"
+
+}
+
+
+resource "aws_elastic_beanstalk_environment" "vprofile-bean-prod" {
+  name                = "vprofile-bean-prod"
+  application         = aws_elastic_beanstalk_application.vprofile-prod.name
+  cname_prefix        = "vprofile-bean-prod-domain"
+  solution_stack_name = "64bit Amazon Linux 2 v4.2.3 running Tomcat 8.5 Corretto 11"
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "VPCId"
+    value     = module.vpc.vpc_id
+  }
+  
+  
+   setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "IamInstanceProfile"
+    value   =   "aws-elasticbeanstalk-ec2-role"
+  }
+
+
+  setting {
+    namespace = "aws:ec2:instances"
+    name      = "InstanceTypes"
+    value     = "t2.micro"
+  }
+
+ 
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "enviroment"
+    value     = "prod"
+  }
+
+  setting {
+    namespace = "aws:autoscaling:updatepolicy:rollingupdate"
+    name      = "RollingUpdateEnabled"
+    value     = "true"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "AssociatePublicIpAddress"
+    value     = "false"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "subnets"
+    value     = join(",", [module.vpc.private_subnets[0], module.vpc.private_subnets[0], module.vpc.private_subnets[0]])
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBSubnets"
+    value     = join(",", [module.vpc.public_subnets[0], module.vpc.public_subnets[0], module.vpc.public_subnets[0]])
+  }
+
+  setting {
+    namespace = "aws:elb:loadbalancer"
+    name      = "CrossZone"
+    value     = "true"
+  }
+  setting {
+    namespace = "aws:elb:loadbalancer"
+    name      = "SecurityGroups"
+    value     = aws_security_group.vprofile-bean-elb-sg.id
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "StickinessEnabled"
+    value     = "true"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "BatchSizeType"
+    value     = "Fixed"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "DeploymentPolicy"
+    value     = "Rolling"
+  }
+
+ 
+
+  depends_on = [aws_security_group.vprofile-bean-elb-sg, aws_security_group.vprofile-prod-sg]
+}
+
+
+####################################
+variable file
+####################################
+
+variable "REGION" {
+  default = "us-east-2"
+}
+
+variable "AMIS" {
+  type = map(any)
+  default = {
+    us-east-1  = "ami-07efac79022b86107"
+    us-east-2  = "ami-07efac79022b86107"
+    ap-south-1 = "ami-00bf4ae5a7909786c"
+  }
+}
+
+variable "user" {
+  default = "ubuntu"
+
+}
+
+variable "Pri-key" {
+  default = "vprofilekey"
+}
+
+variable "Public_key_path" {
+  default = "vprofilekey.pub"
+}
+
+variable "myip" {
+  default = "202.184.197.163/32"
+}
+
+variable "rmquser" {
+  default = "rabbit"
+}
+
+variable "rmqpass" {
+  default = "Big33rn!1234567"
+}
+
+
+variable "dbname" {
+  default = "accounts"
+}
+
+variable "dbuser" {
+  default = "admin"
+}
+
+variable "dbpass" {
+  default = "admin123"
+}
+
+variable "instance_count" {
+  default = "1"
+}
+
+
+variable "vpc_name" {
+  default = "vprofile-vpc"
+}
+
+
+variable "zone1" {
+  default = "us-east-2a"
+}
+
+variable "zone2" {
+  default = "us-east-2b"
+}
+
+variable "zone3" {
+  default = "us-east-2c"
+}
+
+variable "vpc-cidr" {
+
+  default = "172.0.0.0/16"
+
+}
+
+
+variable "publicsubnet1" {
+
+  default = "172.0.1.0/24"
+}
+
+variable "publicsubnet2" {
+
+  default = "172.0.2.0/24"
+}
+
+variable "publicsubnet3" {
+
+  default = "172.0.3.0/24"
+}
+
+variable "privatesubnet1" {
+
+  default = "172.0.11.0/24"
+}
+
+variable "privatesubnet2" {
+
+  default = "172.0.12.0/24"
+}
+
+variable "privatesubnet3" {
+
+  default = "172.0.13.0/24"
+}
+#####################################################
+Ansible file for Building Artifacts and copying files
+#####################################################
+
+---
+ - name: Generate Artifacts, copy artifact & sql file to files directory
+   hosts: localhost
+   connection: local
+   become: yes
+   gather_facts: no
+   tasks:
+     - name: Install jdk, maven, git
+       apt:
+        name: "{{item}}"
+        state: present
+        update-cache: yes
+       loop:
+         - git
+         - openjdk-8-jdk
+         - maven
+
+
+     - name: Clone the source code from github
+       git: 
+         repo: "https://github.com/devopshydclub/vprofile-repo.git"
+         dest: ./Vprofile-repo
+         version: vp-rem
+       register: git_status
+            
+     - name: mvn install command to build artifacts
+       command: "mvn install"
+       args:
+         chdir: Vprofile-repo 
+       when: git_status.changed
+       register: mvn_info
+
+     - name: mkdir files
+       command :  "mkdir files"   
+
+       # - debug:
+       #  msg: "{{mvn_info}}"
+     - name: Copy artifacts to files directory
+       command: "cp Vprofile-repo/target/vprofile-v2.war files/"
+
+     - name: Copy SQL to files directory
+       command: "cp Vprofile-repo/src/main/resources/db_backup.sql files/"  
+
+######################################################################
+Bash file for cloning git repo and installing mysql on bastion host
+######################################################################      
+#! /bin/bash
+sudo apt update
+sudo apt-get install git mysql-client-core-8.0 software-properties-common  -y
+sudo add-apt-repository --yes --update ppa:ansible/ansible
+sudo apt install ansible
+git clone -b vp-rem https://github.com/devopshydclub/vprofile-project.git
+git clone -b vp-rem https://github.com/devopshydclub/vprofile-repo.git
+
+# Chances will get security error in ubuntu 20.0 so for that will disable the ssl mode
+# mysql -h  ${rds-endpoint} -u ${dbuser} --password=${dbpass} accounts < /home/ubuntu/vprofile-project/src/main/resources/db_backup.sql
