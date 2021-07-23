@@ -30,5 +30,9 @@ vprofile-Project
             RDS
             Elastic Cache
             Active MQ
-        Security Group, key-pairs, Bastion host....    
+        Security Group, key-pairs, Bastion host....  
+        
+******Master File***********
+Have created master file which contains all the tf code for building Beanstalk app on cloud.
+        
 
