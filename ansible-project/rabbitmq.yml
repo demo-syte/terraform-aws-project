@@ -1,0 +1,71 @@
+# install erlang and Rabbitmq packages and adding their repo
+---
+ - name: install & setup Rabbitmq with user
+   hosts: rmqsrvgrp
+   gather_facts: no
+   become: yes
+   tasks:
+
+      - name: add erlang repo package
+        apt:
+          deb: https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
+
+
+      - name: add and erlang pub key
+        apt_key:
+           url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+           state: present
+
+
+      - name: Install Erlang
+        apt: name=erlang update_cache=yes state=present
+
+
+      - name: add repo
+        apt_repository:
+               repo: deb https://dl.bintray.com/rabbitmq/debian xenial main
+               state: present
+
+
+      - name: Add an Apt signing key
+        apt_key:
+          url: https://dl.bintray.com/rabbitmq/Keys/rabbitmq-release-signing-key.asc        
+
+      - name: Install rabbitmq-server
+        apt: name=rabbitmq-server state=present
+
+
+      - name: Config setup
+        copy:
+         content: |
+           [{rabbit, [{loopback_users, []}]}].  
+         dest: /etc/rabbitmq/rabbitmq.config
+        notify:
+           - Restart RMQ
+
+      - name: Rabbitmq test user
+        rabbitmq_user:
+            user: test
+            password: test
+            configure_priv: .*
+            write_priv: .*
+            read_priv: .*
+            tags: administrator
+            state: present
+        notify:
+           - Restart RMQ
+
+
+      - name: Enables Rabbitmq_management plugin
+        rabbitmq_plugin:
+          names: rabbitmq_management
+          state: enabled
+        notify:
+          - Restart RMQ
+
+   
+   handlers:
+     - name: Restart RMQ
+       service:
+         name: rabbitmq-server
+         state: restarted       
